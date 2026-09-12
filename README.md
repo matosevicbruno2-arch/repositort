@@ -153,15 +153,90 @@ npm test           # provjera logike pulta
 
 ## Objava na poslužitelj
 
-- Postavi `NODE_ENV=production` i `BASE_URL=https://tvoja-domena` — kolačić sesije
-  tada ide samo preko HTTPS-a.
-- Dodaj istu adresu u *Authorized redirect URIs* u Google Cloud Console.
-- Sesije preglednika drže se u memoriji procesa, pa se ponovnim pokretanjem gubi
-  prijava u pregledniku. Prijava iz iOS aplikacije to preživljava jer se oslanja
-  na token i refresh token iz baze.
-- `DB_PATH` mora pokazivati na **trajni disk**. Na platformama s privremenim
-  datotečnim sustavom priključi volumen, inače se pri svakom ponovnom pokretanju
-  gubi prijava i prestaju push obavijesti.
+Pult mora biti na internetu da bi mu se pristupalo s mobitela i da bi push
+obavijesti radile — provjera rokova je pozadinski posao koji mora raditi i kad
+nitko nije prijavljen.
+
+U repozitoriju su `Dockerfile` i `railway.json`, pa radi na svakoj platformi koja
+zna pokrenuti Docker sliku. Upute ispod su za **Railway** jer ne uspavljuje
+aplikaciju i nudi trajni disk; oko 5 $ mjesečno.
+
+> Docker slika nije izgrađena ni pokrenuta odavde (u razvojnom okruženju nema
+> Docker daemona). Sam poslužitelj jest provjeren s produkcijskim postavkama:
+> healthcheck, adresa iz okruženja, baza na zadanoj putanji i uredno gašenje
+> na SIGTERM.
+
+### 1. Projekt
+
+1. [railway.app](https://railway.app) → prijava GitHub računom
+2. **New Project → Deploy from GitHub repo** → odaberi `repositort`
+3. U **Settings → Source** postavi granu `claude/aplikacija-a1ht0r`
+
+Railway pročita `railway.json`, izgradi po `Dockerfile`-u i prati `/zdravlje`.
+
+### 2. Trajni disk (obavezno)
+
+Bez njega se baza briše pri svakoj objavi — gubi se prijava, a push obavijesti
+prestaju raditi jer nestane refresh token.
+
+**Settings → Volumes → Add Volume**, mount path `/data`.
+
+### 3. Varijable
+
+**Variables → Raw Editor**, zalijepi i popuni:
+
+```
+NODE_ENV=production
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+SHEET_ID=
+SESSION_SECRET=
+ENCRYPTION_KEY=
+ALLOWED_EMAILS=tvoj@gmail.com
+DB_PATH=/data/pult.db
+```
+
+`SESSION_SECRET` i `ENCRYPTION_KEY` generiraj s `openssl rand -hex 32` (različite).
+`ALLOWED_EMAILS` ovdje nije neobavezan — pult je na javnoj adresi.
+
+`PORT` i `BASE_URL` ne treba postavljati: Railway sam javlja port i domenu, a
+pult je pročita. Uz vlastitu domenu postavi `BASE_URL=https://pult.tvoja-domena.hr`.
+
+Chat i push dodaj kasnije (`ANTHROPIC_API_KEY`, `APNS_*` — vidi `.env.example`).
+
+### 4. Domena i Google
+
+1. **Settings → Networking → Generate Domain** → dobiješ
+   `nesto.up.railway.app`
+2. U [Google konzoli](https://console.cloud.google.com/auth/clients) otvori svoj
+   OAuth client i pod **Authorized redirect URIs** dodaj:
+
+   ```
+   https://nesto.up.railway.app/auth/google/callback
+   ```
+
+   Zadrži i onaj za `localhost` ako želiš i dalje razvijati lokalno.
+
+### 5. Provjera
+
+Otvori `https://nesto.up.railway.app/zdravlje` — treba vratiti `{"ok":true}`.
+Zatim otvori korijen i prijavi se. Prijava sada preživljava objave jer se sesije
+čuvaju u bazi na disku.
+
+### Na vlastitom poslužitelju
+
+```bash
+docker build -t elink-pult .
+docker run -d --name pult -p 3000:3000 \
+  -v /srv/pult-data:/data \
+  --env-file .env \
+  --restart unless-stopped \
+  elink-pult
+```
+
+Ispred stavi reverse proxy s HTTPS-om (Caddy ili nginx) i postavi
+`BASE_URL=https://tvoja-domena`. Bez HTTPS-a kolačić sesije se u produkciji ne
+šalje, pa prijava ne prolazi.
 
 ## Kako je posloženo
 
@@ -181,6 +256,7 @@ src/
 ios/                   nativna iOS aplikacija (SwiftUI)
   lib/
     dashboard.js       izračun svih brojki pulta (bez mreže i postavki)
+    session-store.js   sesije preglednika u bazi umjesto u memoriji
     newjob.js          sastavljanje novog retka i mjesto upisa u tablicu
     notifications.js   pravila za push obavijesti
     store.js           trajna pohrana (SQLite)

@@ -1,0 +1,8 @@
+node_modules
+data
+ios
+test
+.git
+.env
+.env.local
+*.md

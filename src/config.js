@@ -12,9 +12,20 @@ const list = (name) =>
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
 
+/**
+ * Javna adresa pulta. Platforme same javljaju dodijeljenu domenu, pa je
+ * BASE_URL potreban samo uz vlastitu domenu ili poslužitelj.
+ */
+function odrediBaseUrl() {
+  if (process.env.BASE_URL) return process.env.BASE_URL.replace(/\/+$/, '');
+  const domena = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.RENDER_EXTERNAL_HOSTNAME || process.env.FLY_APP_NAME_DOMAIN;
+  if (domena) return `https://${domena}`;
+  return `http://localhost:${Number(process.env.PORT || 3000)}`;
+}
+
 export const config = {
   port: Number(process.env.PORT || 3000),
-  baseUrl: process.env.BASE_URL || `http://localhost:${Number(process.env.PORT || 3000)}`,
+  baseUrl: odrediBaseUrl(),
 
   google: {
     clientId: required('GOOGLE_CLIENT_ID'),

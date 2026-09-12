@@ -5,6 +5,7 @@ import session from 'express-session';
 import { config } from './config.js';
 import { authRouter, clientForUser, store } from './auth.js';
 import { apiRouter } from './routes/api.js';
+import { createSessionStore } from './lib/session-store.js';
 import { startNotifier } from './services/notifier.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -15,6 +16,8 @@ app.use(express.json({ limit: '256kb' }));
 app.use(
   session({
     name: 'elink.sid',
+    // Sesije žive u istoj bazi kao ostalo, pa prijava preživi objavu.
+    store: createSessionStore(store.db),
     secret: config.session.secret,
     resave: false,
     saveUninitialized: false,
@@ -39,7 +42,7 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: { code: 'internal', message: 'Neočekivana greška poslužitelja.' } });
 });
 
-app.listen(config.port, () => {
+const server = app.listen(config.port, () => {
   console.log(`Elink ICT pult sluša na ${config.baseUrl}`);
   if (!config.anthropic.enabled) console.log('Chat je isključen (nema ANTHROPIC_API_KEY).');
   if (!config.allowedEmails.length) console.log('Upozorenje: ALLOWED_EMAILS je prazan — prijaviti se može bilo koji Google račun.');
@@ -50,3 +53,26 @@ app.listen(config.port, () => {
     console.log('Push obavijesti isključene (nedostaju APNS_* postavke).');
   }
 });
+
+/**
+ * Uredno gašenje: platforme pri svakoj objavi šalju SIGTERM, pa se prekidaju
+ * zahtjevi u tijeku i baza ostaje otvorena. Ovdje se oboje zatvara redom.
+ */
+let gasi = false;
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.on(signal, () => {
+    if (gasi) return;
+    gasi = true;
+    console.log(`Primljen ${signal}, gasim se…`);
+    server.close(() => {
+      try {
+        store.close();
+      } catch (e) {
+        console.error('Zatvaranje baze nije uspjelo:', e.message);
+      }
+      process.exit(0);
+    });
+    // Ako se zahtjevi ne zatvore na vrijeme, ne visi beskonačno.
+    setTimeout(() => process.exit(0), 10_000).unref();
+  });
+}
