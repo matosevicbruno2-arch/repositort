@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="hr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Elink ICT — poslovni pult</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛠️</text></svg>">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<section class="login" id="login" hidden>
+  <div class="login-card">
+    <h1>Elink ICT</h1>
+    <p class="sub">poslovi · naplata · inbox</p>
+    <p class="desc">Pult čita podatke iz tvoje Google tablice, Gmaila i Kalendara. Za nastavak se prijavi Google računom.</p>
+    <p class="login-err" id="login-err" hidden></p>
+    <a class="login-btn" href="/auth/google">Prijavi se Google računom</a>
+  </div>
+</section>
+
+<div id="app" hidden>
+<div class="wrap">
+  <header class="head">
+    <div class="brand">
+      <h1>Elink ICT</h1>
+      <span class="sub">poslovi · naplata · inbox</span>
+    </div>
+    <div class="clock">
+      <span class="date" id="today"></span>
+      <span class="live"><span class="dot" id="dot-drive"></span> Tablica <span id="ts-drive">—</span></span>
+      <span class="live"><span class="dot" id="dot-gmail"></span> Gmail <span id="ts-gmail">—</span></span>
+      <span class="live"><span class="dot" id="dot-cal"></span> Kalendar <span id="ts-cal">—</span></span>
+      <button class="refresh" id="btn-refresh" type="button">Osvježi sada</button>
+      <button class="refresh" id="btn-chat" type="button" hidden>💬 Pitaj Claudea</button>
+      <span class="user" id="user-box" hidden><span id="user-email"></span> <button class="refresh" id="btn-logout" type="button">Odjava</button></span>
+    </div>
+  </header>
+
+  <div class="state" id="page-state">Učitavam podatke s tvojeg Google računa… Pult se sam osvježava svakih 5 minuta dok je stranica otvorena.</div>
+
+  <section class="kpis" aria-label="Ključne brojke">
+    <div class="kpi lead">
+      <span class="eyebrow">Za naplatiti</span>
+      <span class="val" id="k-due">—</span>
+      <span class="note" id="k-due-note">iz Solo računa</span>
+    </div>
+    <div class="kpi">
+      <span class="eyebrow">Otvoreni poslovi</span>
+      <span class="val" id="k-open">—</span>
+      <span class="note" id="k-open-note">za napraviti · u tijeku · čeka</span>
+    </div>
+    <div class="kpi">
+      <span class="eyebrow">Za fakturirati</span>
+      <span class="val" id="k-inv">—</span>
+      <span class="note" id="k-inv-note">završeno, račun još nije izdan</span>
+    </div>
+    <div class="kpi">
+      <span class="eyebrow">Naplaćeno <span id="k-paid-year"></span></span>
+      <span class="val" id="k-paid">—</span>
+      <span class="note" id="k-paid-note">svi primici (gotovina + račun)</span>
+    </div>
+  </section>
+
+  <div class="grid">
+    <!-- LEFT: Jobs & invoices -->
+    <section class="panel" id="panel-drive">
+      <header>
+        <h2>Poslovi i naplata</h2>
+        <span class="src">izvor: <a id="sheet-link" href="#" target="_blank" rel="noopener">Google tablica</a></span>
+      </header>
+      <div class="state" id="state-drive" hidden></div>
+
+      <div class="section">
+        <h3>Računi za naplatiti <span id="due-sub"></span></h3>
+        <div class="scroll">
+          <table class="tbl" id="tbl-due">
+            <thead><tr><th>Račun</th><th>Klijent</th><th>Rok</th><th></th><th class="num">Iznos</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>Za fakturirati <span id="inv-sub"></span></h3>
+        <ul class="jobs" id="list-inv"></ul>
+      </div>
+
+      <div class="section">
+        <h3>Otvoreni poslovi <span id="open-sub"></span></h3>
+        <ul class="jobs" id="list-open"></ul>
+      </div>
+
+      <div class="section">
+        <h3>Primici po mjesecu <span id="income-sub">€</span></h3>
+        <div class="chart" id="chart-income"></div>
+      </div>
+    </section>
+
+    <!-- RIGHT: Inbox -->
+    <section class="panel" id="panel-gmail">
+      <header>
+        <h2>Inbox · zadnjih 7 dana</h2>
+        <span class="src"><a href="https://mail.google.com/" target="_blank" rel="noopener">Otvori Gmail</a></span>
+      </header>
+      <div class="state" id="state-gmail" hidden></div>
+      <div class="section">
+        <div class="mailhead" id="mail-filters">
+          <button class="chip accent" type="button" data-cat="sve" aria-pressed="true">Sve</button>
+          <button class="chip accent" type="button" data-cat="klijenti" aria-pressed="false">Klijenti</button>
+          <button class="chip warn" type="button" data-cat="financije" aria-pressed="false">Financije</button>
+          <button class="chip crit" type="button" data-cat="upozorenja" aria-pressed="false">Upozorenja</button>
+          <button class="chip neutral" type="button" data-cat="ostalo" aria-pressed="false">Ostalo</button>
+        </div>
+        <ul class="mail" id="list-mail"></ul>
+      </div>
+    </section>
+  </div>
+
+  <!-- Calendar (live) -->
+  <section class="panel" id="panel-cal">
+    <header>
+      <h2>Kalendar · sljedećih 7 dana</h2>
+      <span class="src"><a href="https://calendar.google.com/" target="_blank" rel="noopener">Otvori Google Kalendar</a></span>
+    </header>
+    <div class="state" id="state-cal" hidden></div>
+    <div class="section">
+      <div class="cal" id="cal"></div>
+    </div>
+  </section>
+
+  <div class="modal-bg" id="rem-bg" hidden>
+    <div class="modal" role="dialog" aria-labelledby="rem-title">
+      <header><h3 id="rem-title">Opomena</h3><button type="button" id="rem-close" aria-label="Zatvori">×</button></header>
+      <div class="body">
+        <div class="meta" id="rem-meta"></div>
+        <div class="note" id="rem-hist"></div>
+        <label>Prima (e-mail klijenta)<input id="rem-to" type="email" list="rem-to-list" placeholder="tražim adresu u Gmailu…"><datalist id="rem-to-list"></datalist></label>
+        <label>Predmet<input id="rem-subj" type="text"></label>
+        <label>Tekst<textarea id="rem-body"></textarea></label>
+        <div class="note" id="rem-status"></div>
+      </div>
+      <footer>
+        <a class="refresh" id="rem-pdf" href="#" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center">PDF računa</a>
+        <button type="button" id="rem-draft">Spremi kao skicu</button>
+        <button type="button" class="primary" id="rem-send">Pošalji opomenu</button>
+      </footer>
+    </div>
+  </div>
+
+  <aside class="chatbox" id="chatbox" hidden aria-label="Pitaj Claudea">
+    <header><span>Pitaj Claudea o pultu</span><button type="button" id="chat-close" aria-label="Zatvori">×</button></header>
+    <div class="chatlog" id="chatlog"><div class="hint">Odgovaram na temelju onoga što pult trenutno prikazuje: računi, poslovi, inbox i kalendar. Npr. „Tko kasni s plaćanjem?“, „Što mi je sutra?“, „Sažmi inbox.“</div></div>
+    <form class="chatform" id="chatform"><input id="chat-in" type="text" placeholder="Pitaj…" autocomplete="off"><button type="submit" id="chat-send">Pošalji</button></form>
+  </aside>
+
+  <footer class="foot">
+    <span>Podaci se čitaju izravno s tvojeg Google računa pri svakom osvježavanju; aplikacija ih ne pohranjuje.</span>
+    <span id="foot-ts"></span>
+  </footer>
+</div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
