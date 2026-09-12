@@ -118,6 +118,18 @@ taj dio pulta neće raditi.
 
 ### 2. Postavke
 
+Najbrže skriptom — provjeri Node, instalira ovisnosti, pita za četiri podatka,
+sam generira tajne i pokrene provjere:
+
+```bash
+bash scripts/postavi.sh
+```
+
+Postojeći `.env` ne prepisuje bez pitanja, a tajne generira na tvom računalu
+(`openssl rand -hex 32`), pa nikad ne prolaze kroz razgovor ni kroz repozitorij.
+
+Ako radije ručno:
+
 ```bash
 cp .env.example .env
 ```
@@ -183,20 +195,15 @@ prestaju raditi jer nestane refresh token.
 
 ### 3. Varijable
 
-**Variables → Raw Editor**, zalijepi i popuni:
+Skripta složi cijeli blok — uzme vrijednosti iz tvog `.env` i generira **nove**
+tajne za produkciju (druge od lokalnih):
 
-```
-NODE_ENV=production
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-SHEET_ID=
-SESSION_SECRET=
-ENCRYPTION_KEY=
-ALLOWED_EMAILS=tvoj@gmail.com
-DB_PATH=/data/pult.db
+```bash
+bash scripts/railway-varijable.sh
 ```
 
-`SESSION_SECRET` i `ENCRYPTION_KEY` generiraj s `openssl rand -hex 32` (različite).
+Ispisano zalijepi u **Variables → Raw Editor**.
+
 `ALLOWED_EMAILS` ovdje nije neobavezan — pult je na javnoj adresi.
 
 `PORT` i `BASE_URL` ne treba postavljati: Railway sam javlja port i domenu, a
@@ -237,6 +244,14 @@ docker run -d --name pult -p 3000:3000 \
 Ispred stavi reverse proxy s HTTPS-om (Caddy ili nginx) i postavi
 `BASE_URL=https://tvoja-domena`. Bez HTTPS-a kolačić sesije se u produkciji ne
 šalje, pa prijava ne prolazi.
+
+## Skripte
+
+| Skripta | Što radi |
+|---|---|
+| `bash scripts/postavi.sh` | Postavlja pult za lokalni rad: provjeri Node i ovisnosti, pita za četiri podatka, generira tajne, složi `.env`, pokrene provjere. |
+| `bash scripts/railway-varijable.sh` | Ispiše blok varijabli za Railway, s novim tajnama za produkciju. |
+| `bash scripts/apns-kljuc.sh <.p8>` | Pretvori Appleov ključ u jedan redak za `APNS_KEY` i pročita Key ID iz naziva datoteke. |
 
 ## Kako je posloženo
 
