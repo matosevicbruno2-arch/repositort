@@ -133,7 +133,7 @@ function renderPult({ data, storedAt }) {
 
   // Primici
   $('k-paid').textContent = fmtEUR0(income.paidTotal);
-  const years = [...new Set(income.byMonth.map(([k]) => k.slice(0, 4)))];
+  const years = [...new Set(income.byMonth.map((m) => m.mjesec.slice(0, 4)))];
   const yearLabel = years.length ? years[years.length - 1] : String(new Date().getFullYear());
   $('k-paid-year').textContent = yearLabel;
   $('income-sub').textContent = `${years.join('–') || yearLabel} · €`;
@@ -149,7 +149,7 @@ function renderIncomeChart(entries) {
   if (!entries.length) { host.innerHTML = '<span class="desc">Nema primitaka u tablici.</span>'; return; }
   const MONTHS = ['sij', 'velj', 'ožu', 'tra', 'svi', 'lip', 'srp', 'kol', 'ruj', 'lis', 'stu', 'pro'];
   const W = 640, H = 170, padL = 8, padR = 8, padT = 22, padB = 24;
-  const max = Math.max(...entries.map((e) => e[1]));
+  const max = Math.max(...entries.map((e) => e.iznos));
   const step = max > 8000 ? 4000 : max > 4000 ? 2000 : 1000;
   const top = Math.max(step, Math.ceil(max / step) * step);
   const n = entries.length, gap = 10;
@@ -161,7 +161,7 @@ function renderIncomeChart(entries) {
     s += `<line class="grid" x1="${padL}" x2="${W - padR}" y1="${y(g)}" y2="${y(g)}"/><text class="axis" x="${padL}" y="${y(g) - 3}">${g / 1000} k</text>`;
   }
   s += `<line class="base" x1="${padL}" x2="${W - padR}" y1="${y(0)}" y2="${y(0)}"/>`;
-  entries.forEach(([key, val], i) => {
+  entries.forEach(({ mjesec: key, iznos: val }, i) => {
     const x = padL + i * (bw + gap);
     const h = Math.max(0, y(0) - y(val));
     const last = i === n - 1;

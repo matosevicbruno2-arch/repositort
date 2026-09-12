@@ -12,6 +12,7 @@ aplikacija nema svoju bazu i ništa ne pohranjuje.
 | Inbox zadnjih 7 dana s kategorizacijom | Gmail API |
 | Kalendar sljedećih 7 dana | Google Calendar API |
 | Slanje opomena i spremanje skica | Gmail API |
+| Unos novog posla s terena | Sheets API (upis) |
 | Chat „Pitaj Claudea“ + dodavanje termina | Claude API + Calendar API |
 
 ## Što aplikacija radi
@@ -26,6 +27,8 @@ aplikacija nema svoju bazu i ništa ne pohranjuje.
 - **Inbox** — razvrstan na klijente, financije, upozorenja i ostalo, s filtrima.
 - **Chat** — odgovara na pitanja isključivo iz onoga što pult trenutno prikazuje
   („Tko kasni s plaćanjem?“, „Što mi je sutra?“) i može dodati termin u kalendar.
+- **iOS aplikacija** — isti pult na iPhoneu, s unosom posla s terena i push
+  obavijestima kad račun prođe rok. Vidi [`ios/README.md`](ios/README.md).
 
 ## Struktura tablice
 
@@ -153,8 +156,12 @@ npm test           # provjera logike pulta
 - Postavi `NODE_ENV=production` i `BASE_URL=https://tvoja-domena` — kolačić sesije
   tada ide samo preko HTTPS-a.
 - Dodaj istu adresu u *Authorized redirect URIs* u Google Cloud Console.
-- Sesije se drže u memoriji procesa, pa se ponovnim pokretanjem gubi prijava. Za
-  više instanci ili trajnu prijavu dodaj vanjski `session store` (Redis, SQLite).
+- Sesije preglednika drže se u memoriji procesa, pa se ponovnim pokretanjem gubi
+  prijava u pregledniku. Prijava iz iOS aplikacije to preživljava jer se oslanja
+  na token i refresh token iz baze.
+- `DB_PATH` mora pokazivati na **trajni disk**. Na platformama s privremenim
+  datotečnim sustavom priključi volumen, inače se pri svakom ponovnom pokretanju
+  gubi prijava i prestaju push obavijesti.
 
 ## Kako je posloženo
 
@@ -169,8 +176,15 @@ src/
     gmail.js           inbox, traženje adrese klijenta, slanje opomene
     calendar.js        termini sljedećih 7 dana, dodavanje termina
     chat.js            Claude API (tok odgovora) + alat dodaj_termin
+    push.js            slanje push obavijesti na APNs
+    notifier.js        povremena provjera rokova i slanje obavijesti
+ios/                   nativna iOS aplikacija (SwiftUI)
   lib/
     dashboard.js       izračun svih brojki pulta (bez mreže i postavki)
+    newjob.js          sastavljanje novog retka i mjesto upisa u tablicu
+    notifications.js   pravila za push obavijesti
+    store.js           trajna pohrana (SQLite)
+    crypto.js          šifriranje tokena u bazi
     parse.js           iznosi i datumi u hrvatskom formatu
     tables.js          pronalaženje tablica u listovima
     cache.js           kratkotrajna predmemorija po korisniku

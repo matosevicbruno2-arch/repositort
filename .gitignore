@@ -4,3 +4,10 @@ node_modules/
 npm-debug.log*
 .DS_Store
 data/
+
+# Xcode
+ios/*.xcodeproj/
+ios/*.xcworkspace/
+ios/DerivedData/
+ios/build/
+*.xcuserstate

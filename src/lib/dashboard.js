@@ -147,7 +147,10 @@ export function computeDashboard(grids, title = '') {
     open,
     toInvoice,
     income: {
-      byMonth: [...byMonth.entries()].sort((a, b) => a[0].localeCompare(b[0])),
+      // Imenovana polja umjesto parova — jednostavnije za dekodiranje u aplikaciji.
+      byMonth: [...byMonth.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([mjesec, iznos]) => ({ mjesec, iznos })),
       paidTotal,
     },
     totals: { dueSum, dueOverdue, overdueCount, openValue, invoiceSum },

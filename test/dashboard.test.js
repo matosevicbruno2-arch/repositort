@@ -102,7 +102,7 @@ test('za fakturirati obuhvaća samo završeno-nefakturirano', () => {
 
 test('primici se grupiraju po mjesecu, a Ukupno se ne broji kao uplata', () => {
   const d = computeDashboard([grid()]);
-  assert.deepEqual(d.income.byMonth, [['2026-03', 2000], ['2026-05', 2000]]);
+  assert.deepEqual(d.income.byMonth, [{ mjesec: '2026-03', iznos: 2000 }, { mjesec: '2026-05', iznos: 2000 }]);
   assert.equal(d.income.paidTotal, 4000); // iz retka "Ukupno"
 });
 

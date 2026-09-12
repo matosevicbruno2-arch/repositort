@@ -1,0 +1,31 @@
+# XcodeGen spec — iz ovoga se stvara ElinkPult.xcodeproj:
+#   brew install xcodegen && cd ios && xcodegen generate
+name: ElinkPult
+options:
+  bundleIdPrefix: hr.elink
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    DEVELOPMENT_TEAM: "" # upiši svoj Team ID iz Apple Developer računa
+
+targets:
+  ElinkPult:
+    type: application
+    platform: iOS
+    sources:
+      - path: ElinkPult
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: hr.elink.pult
+        PRODUCT_NAME: Pult
+        INFOPLIST_FILE: ElinkPult/Info.plist
+        CODE_SIGN_ENTITLEMENTS: ElinkPult/ElinkPult.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
