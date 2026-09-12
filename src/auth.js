@@ -1,26 +1,37 @@
 import express from 'express';
 import { google } from 'googleapis';
 import { config, SCOPES } from './config.js';
+import { openStore } from './lib/store.js';
+import { newToken } from './lib/crypto.js';
 
-/** OAuth klijent vezan uz sesiju; sam osvježava access token. */
+export const store = openStore(config.dbPath, config.encryptionKey);
+
+const baseClient = () =>
+  new google.auth.OAuth2(config.google.clientId, config.google.clientSecret, config.google.redirectUri);
+
+/** OAuth klijent vezan uz sesiju u pregledniku; sam osvježava access token. */
 export function oauthClient(req) {
-  const client = new google.auth.OAuth2(
-    config.google.clientId,
-    config.google.clientSecret,
-    config.google.redirectUri,
-  );
+  if (req?.googleAuth) return req.googleAuth;
+  const client = baseClient();
   if (req?.session?.tokens) client.setCredentials(req.session.tokens);
   client.on('tokens', (tokens) => {
     if (!req.session) return;
-    // refresh_token stiže samo pri prvom pristanku — ne pregazi ga praznim.
+    // refresh_token stiže samo pri prvom pristanku — ne pregazi ga praznim
     req.session.tokens = { ...req.session.tokens, ...tokens };
+    if (tokens.refresh_token && req.session.user?.email) {
+      store.saveUser(req.session.user.email, tokens.refresh_token);
+    }
   });
   return client;
 }
 
-export function requireAuth(req, res, next) {
-  if (req.session?.tokens?.access_token || req.session?.tokens?.refresh_token) return next();
-  res.status(401).json({ error: { code: 'not_authenticated', message: 'Prijava je potrebna.' } });
+/** OAuth klijent iz trajno pohranjenog refresh tokena — za aplikaciju i pozadinske provjere. */
+export function clientForUser(email) {
+  const refreshToken = store.getRefreshToken(email);
+  if (!refreshToken) return null;
+  const client = baseClient();
+  client.setCredentials({ refresh_token: refreshToken });
+  return client;
 }
 
 function emailAllowed(email) {
@@ -28,11 +39,36 @@ function emailAllowed(email) {
   return config.allowedEmails.includes(String(email || '').toLowerCase());
 }
 
+/**
+ * Prihvaća oba načina prijave: kolačić sesije (preglednik) i
+ * `Authorization: Bearer` (iOS aplikacija).
+ */
+export function requireAuth(req, res, next) {
+  const bearer = /^Bearer\s+(.+)$/i.exec(req.get('authorization') || '')?.[1];
+  if (bearer) {
+    const email = store.emailForAppToken(bearer.trim());
+    const client = email ? clientForUser(email) : null;
+    if (!client) {
+      return res
+        .status(401)
+        .json({ error: { code: 'needs_reauth', message: 'Prijava aplikacije je istekla — prijavi se ponovno.' } });
+    }
+    req.googleAuth = client;
+    req.userEmail = email;
+    return next();
+  }
+  if (req.session?.tokens?.access_token || req.session?.tokens?.refresh_token) {
+    req.userEmail = req.session.user?.email || req.sessionID;
+    return next();
+  }
+  res.status(401).json({ error: { code: 'not_authenticated', message: 'Prijava je potrebna.' } });
+}
+
 export const authRouter = express.Router();
 
 authRouter.get('/google', (req, res) => {
-  const client = oauthClient(req);
-  const state = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  const client = baseClient();
+  const state = `${newToken()}${req.query.mode === 'app' ? '.app' : ''}`;
   req.session.oauthState = state;
   res.redirect(
     client.generateAuthUrl({
@@ -47,13 +83,16 @@ authRouter.get('/google', (req, res) => {
 
 authRouter.get('/google/callback', async (req, res) => {
   const { code, state, error } = req.query;
-  if (error) return res.redirect('/?prijava=odbijena');
-  if (!code || !state || state !== req.session.oauthState) {
-    return res.redirect('/?prijava=neispravna');
-  }
+  const forApp = String(state || '').endsWith('.app');
+  const fail = (razlog) =>
+    forApp ? res.redirect(`${config.appScheme}://auth?greska=${razlog}`) : res.redirect(`/?prijava=${razlog}`);
+
+  if (error) return fail('odbijena');
+  if (!code || !state || state !== req.session.oauthState) return fail('neispravna');
   delete req.session.oauthState;
+
   try {
-    const client = oauthClient(req);
+    const client = baseClient();
     const { tokens } = await client.getToken(String(code));
     client.setCredentials(tokens);
 
@@ -62,18 +101,32 @@ authRouter.get('/google/callback', async (req, res) => {
 
     if (!emailAllowed(data.email)) {
       req.session.destroy(() => {});
-      return res.redirect('/?prijava=zabranjena');
+      return fail('zabranjena');
     }
+    store.saveUser(data.email, tokens.refresh_token);
+
+    if (forApp) {
+      // Aplikacija se vraća preko vlastite sheme i dalje se javlja s tokenom.
+      if (!tokens.refresh_token && !store.getRefreshToken(data.email)) return fail('bez_tokena');
+      const token = store.issueAppToken(data.email, newToken());
+      return res.redirect(`${config.appScheme}://auth?token=${encodeURIComponent(token)}`);
+    }
+
     req.session.tokens = tokens;
     req.session.user = { email: data.email, name: data.name || data.email, picture: data.picture };
     res.redirect('/');
   } catch (e) {
     console.error('OAuth callback nije uspio:', e.message);
-    res.redirect('/?prijava=greska');
+    fail('greska');
   }
 });
 
 authRouter.post('/odjava', (req, res) => {
+  const bearer = /^Bearer\s+(.+)$/i.exec(req.get('authorization') || '')?.[1];
+  if (bearer) {
+    store.revokeAppToken(bearer.trim());
+    return res.json({ ok: true });
+  }
   req.session.destroy(() => res.json({ ok: true }));
 });
 

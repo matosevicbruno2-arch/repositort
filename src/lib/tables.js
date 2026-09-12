@@ -11,10 +11,11 @@ const clean = (v) => String(v ?? '').trim();
 /**
  * @param {string[][][]} grids  vrijednosti po listu
  * @param {string[]} headerCells  stupci koji moraju postojati u zaglavlju
- * @returns {{idx: Record<string, number>, rows: string[][]} | null}
+ * @returns {{idx, rows, gridIndex, headerRow, lastRow, width} | null}
  */
 export function findTable(grids, headerCells) {
-  for (const grid of grids) {
+  for (let g = 0; g < grids.length; g++) {
+    const grid = grids[g];
     if (!grid) continue;
     for (let r = 0; r < grid.length; r++) {
       const row = (grid[r] || []).map(clean);
@@ -26,12 +27,15 @@ export function findTable(grids, headerCells) {
       });
 
       const rows = [];
+      let last = r;
       for (let i = r + 1; i < grid.length; i++) {
         const cells = (grid[i] || []).map(clean);
         if (!cells.some((c) => c)) break; // prazan redak = kraj tablice
         rows.push(cells);
+        last = i;
       }
-      return { idx, rows };
+      // Položaj treba za upis novog retka na točno mjesto unutar lista.
+      return { idx, rows, gridIndex: g, headerRow: r, lastRow: last, width: row.length };
     }
   }
   return null;

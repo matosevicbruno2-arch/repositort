@@ -3,8 +3,9 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import session from 'express-session';
 import { config } from './config.js';
-import { authRouter } from './auth.js';
+import { authRouter, clientForUser, store } from './auth.js';
 import { apiRouter } from './routes/api.js';
+import { startNotifier } from './services/notifier.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -42,4 +43,10 @@ app.listen(config.port, () => {
   console.log(`Elink ICT pult sluša na ${config.baseUrl}`);
   if (!config.anthropic.enabled) console.log('Chat je isključen (nema ANTHROPIC_API_KEY).');
   if (!config.allowedEmails.length) console.log('Upozorenje: ALLOWED_EMAILS je prazan — prijaviti se može bilo koji Google račun.');
+  if (config.apns.enabled) {
+    startNotifier({ store, clientForUser });
+    console.log(`Push obavijesti uključene (provjera svakih ${Math.round(config.notifyIntervalMs / 60000)} min).`);
+  } else {
+    console.log('Push obavijesti isključene (nedostaju APNS_* postavke).');
+  }
 });

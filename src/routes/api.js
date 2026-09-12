@@ -1,8 +1,9 @@
 import express from 'express';
 import { config } from '../config.js';
-import { oauthClient, requireAuth } from '../auth.js';
+import { oauthClient, requireAuth, store } from '../auth.js';
 import { cached, drop, storedAt } from '../lib/cache.js';
-import { loadDashboard } from '../services/sheets.js';
+import { appendJob, loadDashboard } from '../services/sheets.js';
+import { validateJob } from '../lib/newjob.js';
 import { loadInbox, lookupInvoiceContact, sendReminder } from '../services/gmail.js';
 import { createEvent, loadCalendar } from '../services/calendar.js';
 import { buildContext, streamChat } from '../services/chat.js';
@@ -10,7 +11,7 @@ import { buildContext, streamChat } from '../services/chat.js';
 export const apiRouter = express.Router();
 apiRouter.use(requireAuth);
 
-const keyOf = (req, name) => `${req.session.user?.email || req.sessionID}:${name}`;
+const keyOf = (req, name) => `${req.userEmail || req.sessionID}:${name}`;
 
 /** Prevodi greške Google API-ja u poruke koje pult zna prikazati. */
 function fail(res, e, izvor) {
@@ -61,7 +62,7 @@ dataRoute('/inbox', 'inbox', 'Gmaila', loadInbox);
 dataRoute('/kalendar', 'kalendar', 'Google kalendara', loadCalendar);
 
 apiRouter.post('/osvjezi', (req, res) => {
-  drop(`${req.session.user?.email || req.sessionID}:`);
+  drop(`${req.userEmail || req.sessionID}:`);
   res.json({ ok: true });
 });
 
@@ -111,6 +112,39 @@ apiRouter.post('/termin', async (req, res) => {
   }
 });
 
+/** Upis novog posla u tablicu — unos s terena iz aplikacije ili preglednika. */
+apiRouter.post('/posao', async (req, res) => {
+  const { ok, greske, posao } = validateJob(req.body);
+  if (!ok) {
+    return res.status(400).json({ error: { code: 'bad_request', message: greske.join(' ') } });
+  }
+  try {
+    const data = await appendJob(oauthClient(req), posao);
+    drop(keyOf(req, 'pult'));
+    res.status(201).json({ data });
+  } catch (e) {
+    fail(res, e, 'Google tablice');
+  }
+});
+
+/** Registracija iOS uređaja za push obavijesti. */
+apiRouter.post('/uredjaj', (req, res) => {
+  const token = String(req.body?.token || '').trim();
+  if (!/^[0-9a-f]{64,200}$/i.test(token)) {
+    return res.status(400).json({ error: { code: 'bad_request', message: 'Neispravan token uređaja.' } });
+  }
+  if (!req.userEmail) {
+    return res.status(400).json({ error: { code: 'bad_request', message: 'Korisnik nije poznat.' } });
+  }
+  store.registerDevice(req.userEmail, token);
+  res.json({ data: { registriran: true, push: config.apns.enabled } });
+});
+
+apiRouter.delete('/uredjaj/:token', (req, res) => {
+  store.removeDevice(req.params.token);
+  res.json({ data: { uklonjen: true } });
+});
+
 /** Razgovor s Claudeom o stanju pulta — odgovor stiže kao SSE tok. */
 apiRouter.post('/chat', async (req, res) => {
   if (!config.anthropic.enabled) {
@@ -122,7 +156,7 @@ apiRouter.post('/chat', async (req, res) => {
   }
 
   const auth = oauthClient(req);
-  const email = req.session.user?.email || req.sessionID;
+  const email = req.userEmail || req.sessionID;
 
   // Kontekst se gradi iz istih podataka koje pult prikazuje; izvor koji padne se preskače.
   const settle = (p) => p.then((v) => v, () => null);

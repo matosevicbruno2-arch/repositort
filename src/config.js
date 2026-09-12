@@ -57,12 +57,37 @@ export const config = {
   },
 
   cacheTtlMs: Number(process.env.CACHE_TTL_MS || 60_000),
+
+  // Trajna pohrana: refresh tokeni, uređaji za push, već poslane obavijesti.
+  dbPath: process.env.DB_PATH || './data/pult.db',
+  get encryptionKey() {
+    return process.env.ENCRYPTION_KEY || config.session.secret;
+  },
+
+  // Shema po kojoj se iOS aplikacija vraća s prijave.
+  appScheme: process.env.APP_SCHEME || 'elinkpult',
+
+  apns: {
+    keyId: process.env.APNS_KEY_ID || '',
+    teamId: process.env.APNS_TEAM_ID || '',
+    bundleId: process.env.APNS_BUNDLE_ID || '',
+    // Sadržaj .p8 datoteke; u .env se novi redovi pišu kao \n
+    key: (process.env.APNS_KEY || '').replace(/\\n/g, '\n'),
+    production: process.env.APNS_PRODUCTION === '1',
+    get enabled() {
+      const a = config.apns;
+      return Boolean(a.keyId && a.teamId && a.bundleId && a.key);
+    },
+  },
+
+  // Koliko često se provjerava kasne li računi (0 isključuje provjeru).
+  notifyIntervalMs: Number(process.env.NOTIFY_INTERVAL_MS || 3 * 3600 * 1000),
 };
 
 export const SCOPES = [
   'openid',
   'https://www.googleapis.com/auth/userinfo.email',
-  'https://www.googleapis.com/auth/spreadsheets.readonly',
+  'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.compose',
   'https://www.googleapis.com/auth/gmail.send',
