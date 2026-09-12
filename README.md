@@ -48,19 +48,70 @@ Statusi koji nešto znače: `Za naplatiti` (račun ide na popis za naplatu),
 
 ### 1. Google Cloud projekt
 
-1. Otvori [console.cloud.google.com](https://console.cloud.google.com/) i napravi projekt.
-2. **APIs & Services → Library** — uključi: *Google Sheets API*, *Gmail API*, *Google Calendar API*.
-3. **APIs & Services → OAuth consent screen** — tip *External*, ispuni naziv i
-   kontakt. Dok je aplikacija u statusu *Testing*, pod **Test users** dodaj svoju
-   Google adresu (inače prijava neće proći).
-4. **APIs & Services → Credentials → Create credentials → OAuth client ID**
-   - tip: *Web application*
-   - **Authorized redirect URIs**: `http://localhost:3000/auth/google/callback`
-     (za javni poslužitelj dodaj i `https://tvoja-domena/auth/google/callback`)
-5. Zapiši *Client ID* i *Client secret*.
+Google je OAuth postavke preselio iz *APIs & Services* u zaseban odjeljak
+**Google Auth Platform**, pa se starije upute na internetu često ne poklapaju s
+onim što vidiš. Poveznice ispod vode izravno na pravo mjesto; uz svaki korak je i
+putanja kroz izbornik, za oba rasporeda.
 
-Tražena dopuštenja: čitanje tablica, čitanje Gmaila, pisanje i slanje pošte, te
-upravljanje terminima u kalendaru.
+**1.1 Napravi projekt** — <https://console.cloud.google.com/projectcreate>
+
+Nakon stvaranja provjeri u plavoj traci na vrhu da je odabran baš taj projekt.
+Krivo odabran projekt najčešći je uzrok kasnijih „ne vidim ništa“ situacija.
+
+**1.2 Uključi tri API-ja** — otvori svaku poveznicu i klikni **Enable**:
+
+- [Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com)
+- [Gmail API](https://console.cloud.google.com/apis/library/gmail.googleapis.com)
+- [Google Calendar API](https://console.cloud.google.com/apis/library/calendar-json.googleapis.com)
+
+> Kroz izbornik: ☰ → **APIs & Services → Library** → upiši ime API-ja → **Enable**.
+
+**1.3 Ekran pristanka** — <https://console.cloud.google.com/auth/overview>
+
+Prvi put traži osnovne podatke: naziv aplikacije, e-mail za podršku,
+**Audience → External**, kontakt e-mail i prihvaćanje uvjeta.
+
+**1.4 Dodaj se kao test korisnik** — <https://console.cloud.google.com/auth/audience>
+
+Pod **Test users → Add users** upiši svoju Google adresu i spremi.
+
+Ovaj korak nije neobavezan: dok je aplikacija u statusu *Testing*, prijava prolazi
+**samo** s adresa upisanih ovdje.
+
+> Stariji raspored: **APIs & Services → OAuth consent screen**, gdje su ekran
+> pristanka i test korisnici na istoj stranici.
+
+**1.5 Napravi OAuth client ID** — <https://console.cloud.google.com/auth/clients>
+→ **Create client**
+
+- **Application type**: `Web application`
+- **Name**: bilo što, npr. `Pult lokalno`
+- **Authorized redirect URIs** → **Add URI**:
+
+  ```
+  http://localhost:3000/auth/google/callback
+  ```
+
+  Za javni poslužitelj dodaj i `https://tvoja-domena/auth/google/callback`.
+
+Klikni **Create**; otvori se prozorčić s **Client ID** i **Client secret**. Secret
+se kasnije može ponovno pogledati klikom na klijenta u popisu.
+
+Dvije zamke: mora biti **redirect URI**, ne *Authorized JavaScript origin*, i mora
+se poklapati znak po znak (`http`, ne `https`, sa `/auth/google/callback` na kraju).
+Neslaganje daje grešku `redirect_uri_mismatch` pri prijavi.
+
+> Stariji raspored: **APIs & Services → Credentials → Create credentials →
+> OAuth client ID**.
+
+**Data Access** (popis dopuštenja) ne treba dirati dok je aplikacija u *Testing*
+modu — traži ih sama pri prijavi, a test korisnik ih odobri. Traže se: čitanje
+tablica, čitanje Gmaila, pisanje i slanje pošte te upravljanje terminima u kalendaru.
+
+**Pri prvoj prijavi** Google prikazuje upozorenje *„Google hasn't verified this
+app“*. To je očekivano za aplikaciju u *Testing* modu — klikni **Advanced** →
+**Go to … (unsafe)**. Zatim prihvati sva tražena dopuštenja; ako neko odznačiš,
+taj dio pulta neće raditi.
 
 ### 2. Postavke
 
@@ -68,8 +119,19 @@ upravljanje terminima u kalendaru.
 cp .env.example .env
 ```
 
-Popuni `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SHEET_ID` i `SESSION_SECRET`
-(`openssl rand -hex 32`). `SHEET_ID` je dio adrese tablice između `/d/` i `/edit`.
+Popuni četiri vrijednosti:
+
+| Varijabla | Odakle |
+|---|---|
+| `GOOGLE_CLIENT_ID` | iz koraka 1.5 |
+| `GOOGLE_CLIENT_SECRET` | iz koraka 1.5 |
+| `SHEET_ID` | iz adrese tablice, dio između `/d/` i `/edit` |
+| `SESSION_SECRET` | `openssl rand -hex 32` |
+
+```
+docs.google.com/spreadsheets/d/1L6BNk7i9qF070trOztCGqRLCfWTWBl_pYIkUEMXORUs/edit
+                               └───────────────── SHEET_ID ─────────────────┘
+```
 
 U `ALLOWED_EMAILS` upiši adrese koje smiju ući. **Ako je prazno, prijaviti se može
 bilo koji Google račun** — na javnom poslužitelju to obavezno popuni.
