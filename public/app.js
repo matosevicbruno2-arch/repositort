@@ -7,6 +7,21 @@ const fmtEUR0 = (n) => new Intl.NumberFormat('hr-HR', { style: 'currency', curre
 const fmtTime = (ms) => new Date(ms).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit' });
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
+/**
+ * Poveznice dolaze iz tablice i s Googlea. Escaping sprječava izlazak iz
+ * atributa, ali ne i "javascript:" u href — zato se propuštaju samo http i https.
+ */
+function safeUrl(url) {
+  const t = String(url ?? '').trim();
+  if (!t) return null;
+  try {
+    const u = new URL(t, location.origin);
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+
 /** 'YYYY-MM-DD' → Date u lokalnoj ponoći (bez pomaka vremenske zone). */
 const day = (iso) => (iso ? new Date(`${iso}T00:00:00`) : null);
 const fmtDay = (iso) => (day(iso) ? day(iso).toLocaleDateString('hr-HR', { day: 'numeric', month: 'numeric' }) : '—');
@@ -69,8 +84,9 @@ function renderPult({ data, storedAt }) {
           else if (d.late >= -3) chip = `<span class="chip warn">rok ${d.late === 0 ? 'danas' : 'za ' + -d.late + ' d'}</span>`;
           else chip = `<span class="chip good">za ${-d.late} d</span>`;
         }
-        const noCell = d.pdf
-          ? `<a class="mono" href="${esc(d.pdf)}" target="_blank" rel="noopener" style="text-decoration:none;border-bottom:1px solid var(--line-strong)">${esc(d.no)}</a>`
+        const pdf = safeUrl(d.pdf);
+        const noCell = pdf
+          ? `<a class="mono" href="${esc(pdf)}" target="_blank" rel="noopener" style="text-decoration:none;border-bottom:1px solid var(--line-strong)">${esc(d.no)}</a>`
           : `<span class="mono">${esc(d.no)}</span>`;
         const sent = sentReminders.get(d.no);
         const act = d.amount > 0
@@ -228,8 +244,9 @@ function renderKalendar({ data, storedAt }) {
           const e = ev.end ? new Date(ev.end) : null;
           const t = ev.allDay ? 'cijeli dan' : fmtClock(s) + (e ? '–' + fmtClock(e) : '');
           const inner = `<span class="t mono">${esc(t)}</span><span class="w">${esc(ev.title)}</span>${ev.loc ? `<span class="l">${esc(ev.loc)}</span>` : ''}${ev.desc ? `<span class="l">${esc(ev.desc.slice(0, 120))}</span>` : ''}`;
-          return ev.link
-            ? `<a class="ev${ev.allDay ? ' allday' : ''}" href="${esc(ev.link)}" target="_blank" rel="noopener">${inner}</a>`
+          const link = safeUrl(ev.link);
+          return link
+            ? `<a class="ev${ev.allDay ? ' allday' : ''}" href="${esc(link)}" target="_blank" rel="noopener">${inner}</a>`
             : `<div class="ev${ev.allDay ? ' allday' : ''}">${inner}</div>`;
         }).join('')
       : '<div class="empty">—</div>';
@@ -309,8 +326,9 @@ async function openReminder(no) {
   $('rem-to-list').innerHTML = '';
   $('rem-subj').value = `Podsjetnik na dospjeli račun ${d.no}`;
   $('rem-body').value = reminderText(d);
-  $('rem-pdf').href = d.pdf || '#';
-  $('rem-pdf').style.display = d.pdf ? '' : 'none';
+  const pdf = safeUrl(d.pdf);
+  $('rem-pdf').href = pdf || '#';
+  $('rem-pdf').style.display = pdf ? '' : 'none';
   remStatus('');
   $('rem-send').disabled = false;
   $('rem-draft').disabled = false;

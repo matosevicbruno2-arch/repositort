@@ -28,7 +28,8 @@ export function openStore(file, secret) {
       token_hash TEXT PRIMARY KEY,
       email TEXT NOT NULL,
       created_at INTEGER NOT NULL,
-      last_used_at INTEGER
+      last_used_at INTEGER,
+      expires_at INTEGER
     );
     CREATE TABLE IF NOT EXISTS sent_notifications (
       key TEXT PRIMARY KEY,
@@ -39,6 +40,13 @@ export function openStore(file, secret) {
   `);
 
   const now = () => Date.now();
+
+  // Baze nastale prije uvođenja isteka tokena dobivaju stupac naknadno.
+  const stupci = db.prepare('PRAGMA table_info(app_tokens)').all().map((r) => r.name);
+  if (!stupci.includes('expires_at')) db.exec('ALTER TABLE app_tokens ADD COLUMN expires_at INTEGER');
+
+  /** Token aplikacije vrijedi ograničeno; ukradeni token tako ne vrijedi zauvijek. */
+  const TRAJANJE_TOKENA_MS = 180 * 24 * 3600 * 1000;
 
   return {
     db,
@@ -71,21 +79,28 @@ export function openStore(file, secret) {
         .map((r) => r.email);
     },
 
-    issueAppToken(email, token) {
-      db.prepare('INSERT OR REPLACE INTO app_tokens (token_hash, email, created_at) VALUES (?, ?, ?)').run(
-        hashToken(token),
-        email,
-        now(),
-      );
+    issueAppToken(email, token, trajanjeMs = TRAJANJE_TOKENA_MS) {
+      db.prepare(
+        'INSERT OR REPLACE INTO app_tokens (token_hash, email, created_at, expires_at) VALUES (?, ?, ?, ?)',
+      ).run(hashToken(token), email, now(), now() + trajanjeMs);
       return token;
     },
 
     emailForAppToken(token) {
       const hash = hashToken(token);
-      const row = db.prepare('SELECT email FROM app_tokens WHERE token_hash = ?').get(hash);
+      const row = db.prepare('SELECT email, expires_at FROM app_tokens WHERE token_hash = ?').get(hash);
       if (!row) return null;
+      if (row.expires_at != null && row.expires_at < now()) {
+        db.prepare('DELETE FROM app_tokens WHERE token_hash = ?').run(hash);
+        return null;
+      }
       db.prepare('UPDATE app_tokens SET last_used_at = ? WHERE token_hash = ?').run(now(), hash);
       return row.email;
+    },
+
+    /** Poništava sve tokene korisnika — koristi se kad izgubi pristup. */
+    revokeAllAppTokens(email) {
+      db.prepare('DELETE FROM app_tokens WHERE email = ?').run(email);
     },
 
     revokeAppToken(token) {
@@ -103,8 +118,15 @@ export function openStore(file, secret) {
       return db.prepare('SELECT device_token FROM devices WHERE email = ?').all(email).map((r) => r.device_token);
     },
 
+    /** Bez e-maila briše bilo koji uređaj — samo za čišćenje kad ga APNs odbije. */
     removeDevice(deviceToken) {
       db.prepare('DELETE FROM devices WHERE device_token = ?').run(deviceToken);
+    },
+
+    /** Iz zahtjeva se smije brisati samo vlastiti uređaj. */
+    removeDeviceForUser(email, deviceToken) {
+      const r = db.prepare('DELETE FROM devices WHERE device_token = ? AND email = ?').run(deviceToken, email);
+      return r.changes > 0;
     },
 
     /** Vraća true samo prvi put za dani ključ — sprječava ponavljanje iste obavijesti. */

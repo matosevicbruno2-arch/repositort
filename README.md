@@ -245,6 +245,28 @@ Ispred stavi reverse proxy s HTTPS-om (Caddy ili nginx) i postavi
 `BASE_URL=https://tvoja-domena`. Bez HTTPS-a kolačić sesije se u produkciji ne
 šalje, pa prijava ne prolazi.
 
+## Sigurnost
+
+Pult smije čitati tvoj Gmail, slati poštu s tvoje adrese, pisati u tablicu i
+upravljati kalendarom, pa na javnoj adresi vrijedi znati kako je zaštićen:
+
+- **Pristup** se provjerava pri svakom zahtjevu, ne samo pri prijavi. Kad adresu
+  makneš iz `ALLOWED_EMAILS`, sesija i tokeni te osobe prestaju vrijediti odmah.
+  Ostavljen prazan popis znači da se može prijaviti bilo tko — na javnoj adresi
+  ga obavezno popuni.
+- **Refresh tokeni** su u bazi šifrirani (AES-256-GCM, `ENCRYPTION_KEY`).
+  Tokeni aplikacije pamte se samo kao otisak i vrijede 180 dana.
+- **Prijava** stvara novu sesiju, pa podmetnuti ID sesije ne vrijedi nakon nje.
+  Kolačić je `httpOnly`, `sameSite=lax` i u produkciji `secure`.
+- **Sadržaj e-maila je podatak, ne uputa.** Chat u kontekst dobiva inbox, koji
+  piše bilo tko tko ti pošalje poruku; sustavska uputa mu izričito zabranjuje
+  postupanje po naredbama iz podataka i dodavanje termina osim na tvoj zahtjev.
+- Upiti prema bazi su parametrizirani, nazivi listova i broj računa se provjeravaju
+  prije nego uđu u upit, a poveznice iz tablice otvaraju se samo ako su `http(s)`.
+
+Ako pult objaviš, drži `ALLOWED_EMAILS` popunjenim i `ENCRYPTION_KEY` različitim
+od `SESSION_SECRET`.
+
 ## Skripte
 
 | Skripta | Što radi |

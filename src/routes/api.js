@@ -68,6 +68,10 @@ apiRouter.post('/osvjezi', (req, res) => {
 
 /** Adresa klijenta i povijest Solo opomena za račun. */
 apiRouter.get('/racun/:broj/kontakt', async (req, res) => {
+  // Broj računa ulazi u Gmail upit, pa se ograničava na bezopasne znakove.
+  if (!/^[\w./-]{1,40}$/.test(req.params.broj)) {
+    return res.status(400).json({ error: { code: 'bad_request', message: 'Neispravan broj računa.' } });
+  }
   try {
     res.json({ data: await lookupInvoiceContact(oauthClient(req), req.params.broj) });
   } catch (e) {
@@ -141,8 +145,9 @@ apiRouter.post('/uredjaj', (req, res) => {
 });
 
 apiRouter.delete('/uredjaj/:token', (req, res) => {
-  store.removeDevice(req.params.token);
-  res.json({ data: { uklonjen: true } });
+  // Samo vlastiti uređaj — inače bi se mogao odjaviti tuđi.
+  const uklonjen = store.removeDeviceForUser(req.userEmail, req.params.token);
+  res.json({ data: { uklonjen } });
 });
 
 /** Razgovor s Claudeom o stanju pulta — odgovor stiže kao SSE tok. */

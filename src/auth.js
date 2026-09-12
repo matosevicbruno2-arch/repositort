@@ -39,26 +39,45 @@ function emailAllowed(email) {
   return config.allowedEmails.includes(String(email || '').toLowerCase());
 }
 
+const zabranjen = (res) =>
+  res.status(403).json({
+    error: { code: 'forbidden', message: 'Taj račun više nema pristup ovom pultu.' },
+  });
+
 /**
  * Prihvaća oba načina prijave: kolačić sesije (preglednik) i
  * `Authorization: Bearer` (iOS aplikacija).
+ *
+ * Popis dopuštenih adresa provjerava se pri SVAKOM zahtjevu, ne samo pri
+ * prijavi — inače bi uklanjanje adrese s popisa ostalo bez učinka dok god
+ * postoji sesija ili token aplikacije.
  */
 export function requireAuth(req, res, next) {
   const bearer = /^Bearer\s+(.+)$/i.exec(req.get('authorization') || '')?.[1];
   if (bearer) {
-    const email = store.emailForAppToken(bearer.trim());
+    const token = bearer.trim();
+    const email = store.emailForAppToken(token);
     const client = email ? clientForUser(email) : null;
     if (!client) {
       return res
         .status(401)
         .json({ error: { code: 'needs_reauth', message: 'Prijava aplikacije je istekla — prijavi se ponovno.' } });
     }
+    if (!emailAllowed(email)) {
+      store.revokeAllAppTokens(email);
+      return zabranjen(res);
+    }
     req.googleAuth = client;
     req.userEmail = email;
     return next();
   }
   if (req.session?.tokens?.access_token || req.session?.tokens?.refresh_token) {
-    req.userEmail = req.session.user?.email || req.sessionID;
+    const email = req.session.user?.email;
+    if (!emailAllowed(email)) {
+      req.session.destroy(() => {});
+      return zabranjen(res);
+    }
+    req.userEmail = email || req.sessionID;
     return next();
   }
   res.status(401).json({ error: { code: 'not_authenticated', message: 'Prijava je potrebna.' } });
@@ -112,9 +131,17 @@ authRouter.get('/google/callback', async (req, res) => {
       return res.redirect(`${config.appScheme}://auth?token=${encodeURIComponent(token)}`);
     }
 
-    req.session.tokens = tokens;
-    req.session.user = { email: data.email, name: data.name || data.email, picture: data.picture };
-    res.redirect('/');
+    // Nova sesija pri prijavi: ako je napadač ranije podmetnuo ID sesije,
+    // prijavom prestaje vrijediti.
+    req.session.regenerate((e) => {
+      if (e) {
+        console.error('Obnova sesije nije uspjela:', e.message);
+        return res.redirect('/?prijava=greska');
+      }
+      req.session.tokens = tokens;
+      req.session.user = { email: data.email, name: data.name || data.email, picture: data.picture };
+      req.session.save(() => res.redirect('/'));
+    });
   } catch (e) {
     console.error('OAuth callback nije uspio:', e.message);
     fail('greska');
